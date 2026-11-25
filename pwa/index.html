@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tight Lines</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="theme-color" content="#0f766e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tight Lines">
+<style>
+:root{--bg:#f4f7f6;--card:#fff;--ink:#12302c;--mut:#5d7570;--acc:#0f766e;--acc2:#e6f4f1;--line:#d6e2df;--bad:#b42318;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1b19;--card:#14292601;--card:#142926;--ink:#e3f1ee;--mut:#8fa9a4;--acc:#2dd4bf;--acc2:#173a35;--line:#254541;--bad:#f97066;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0d1b19;--card:#142926;--ink:#e3f1ee;--mut:#8fa9a4;--acc:#2dd4bf;--acc2:#173a35;--line:#254541;--bad:#f97066;color-scheme:dark}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:680px;margin:0 auto;padding:16px 14px 90px}
+h1{font-size:22px;margin:4px 0 2px}h2{font-size:17px;margin:18px 0 8px}
+.sub{color:var(--mut);font-size:14px;margin:0 0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav button{flex:1;border:0;background:none;color:var(--mut);padding:10px 4px;font:inherit;font-size:13px;cursor:pointer}
+nav button.on{color:var(--acc);font-weight:600}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 3px}
+input,select,textarea{width:100%;font:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.btn{background:var(--acc);color:var(--bg);border:0;border-radius:10px;padding:11px 16px;font:inherit;font-weight:600;cursor:pointer}
+.btn.ghost{background:var(--acc2);color:var(--acc)}.btn.sm{padding:6px 10px;font-size:13px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:99px;padding:7px 13px;font:inherit;font-size:14px;cursor:pointer}
+.chip.on{background:var(--acc);border-color:var(--acc);color:var(--bg)}
+.tag{display:inline-block;background:var(--acc2);color:var(--acc);border-radius:99px;padding:2px 9px;font-size:12px;margin:2px 4px 2px 0}
+.row{display:grid;grid-template-columns:1.6fr .7fr 1.6fr auto;gap:6px;align-items:end;margin-top:8px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{text-align:center}.stat b{display:block;font-size:22px;color:var(--acc)}.stat span{font-size:12px;color:var(--mut)}
+.x{background:none;border:0;color:var(--bad);cursor:pointer;font-size:18px}
+.note{background:var(--acc2);border-radius:10px;padding:10px;font-size:13px;color:var(--ink);margin:10px 0}
+.top{display:flex;justify-content:space-between;align-items:center}
+.empty{text-align:center;color:var(--mut);padding:30px 10px}
+</style>
+</head>
+<body>
+<main id="app"><p class="empty">Loading…</p></main>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const SPECIES=["Largemouth Bass","Smallmouth Bass","Striped Bass","Bluefish","Fluke","Sea Bass","Trout","Salmon","Walleye","Northern Pike","Musky","Catfish","Crappie","Bluegill","Redfish","Snook","Tarpon","Mahi","Tuna"];
+const SKY=["Clear","Partly cloudy","Overcast","Rain","Fog"],TIDE=["n/a","Incoming","High slack","Outgoing","Low slack"];
+const S={tab:"trips",me:null,session:null,signup:false,ready:false,profile:{species:[]},trips:[],groups:{},names:{},
+ form:null,filter:"all",msg:""};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const today=()=>new Date().toISOString().slice(0,10);
+const blank=()=>({loc:"",date:today(),start:"06:00",end:"09:00",target:"",air:"",wind:"",pres:"",sky:"Clear",water:"",tide:"n/a",share:"me",notes:"",catches:[{sp:"",n:1,lure:""}]});
+const allSp=()=>[...new Set([...S.profile.species,...SPECIES])];
+
+let sb;
+async function init(){
+  render();
+  if(!window.CFG||!CFG.url||CFG.url.includes("YOUR")){S.ready=true;S.msg="Add your Supabase URL and anon key in config.js.";return render();}
+  sb=supabase.createClient(CFG.url,CFG.key);
+  sb.auth.onAuthStateChange((_e,s)=>{S.session=s;S.me=s?s.user.id:null;
+    if(s)setTimeout(()=>{overlay();S.ready=true;render();load();},0);else{S.trips=[];S.groups={};S.profile={species:[]};S.ready=true;render();}});
+  addEventListener("online",()=>S.me&&load());document.addEventListener("visibilitychange",()=>{if(!document.hidden&&S.me)load();});
+}
+const LK=()=>"tl_"+S.me;
+const store=()=>{try{return JSON.parse(localStorage.getItem(LK())||"{}")}catch(e){return{}}};
+const put=o=>{try{localStorage.setItem(LK(),JSON.stringify(o))}catch(e){S.msg="Device storage is full."}};
+const toTrip=r=>({id:r.id,loc:r.loc,date:r.date,start:(r.start_t||"").slice(0,5),end:(r.end_t||"").slice(0,5),target:r.target,air:r.air,wind:r.wind,pres:r.pres,sky:r.sky,water:r.water,tide:r.tide,notes:r.notes,catches:r.catches||[],owner:r.owner||S.me,group:r.group_id||null});
+function overlay(){
+  const st=store(),pend=st.pend||[],dels=new Set(pend.filter(p=>p.op==="del").map(p=>p.id));
+  const adds=pend.filter(p=>p.op==="add").map(p=>Object.assign(toTrip(p.row),{pending:true}));
+  S.pending=pend.length;
+  S.trips=[...adds,...(st.server||[]).filter(t=>!dels.has(t.id)&&!adds.some(a=>a.id===t.id))].sort((a,b)=>(b.date+b.start).localeCompare(a.date+a.start));
+  S.groups=st.groups||{};Object.assign(S.names,st.names||{});S.profile=Object.assign({species:[]},st.profile||{});
+}
+let flushing=false;
+async function flush(){
+  if(flushing||!sb||!S.me)return;flushing=true;
+  try{let st=store();
+    while((st.pend||[]).length){
+      const p=st.pend[0];let r;
+      if(p.op==="add")r=await sb.from("trips").insert(p.row);
+      else if(p.op==="del")r=await sb.from("trips").delete().eq("id",p.id);
+      else r=await sb.from("profiles").upsert({id:S.me,species:p.species});
+      if(r.error&&r.error.code!=="23505"){
+        if(!r.error.code)break;
+        st=store();(st.failed=st.failed||[]).push(p);S.msg="One entry could not sync: "+r.error.message;
+      }else st=store();
+      st.pend.shift();put(st);
+    }
+  }catch(e){}
+  flushing=false;
+}
+async function load(){
+  await flush();
+  try{
+    const [p,gm,t]=await Promise.all([sb.from("profiles").select("*").eq("id",S.me).maybeSingle(),
+      sb.from("group_members").select("group_id,user_id,groups(id,name,code)"),sb.from("trips").select("*").order("date",{ascending:false})]);
+    if(t.error||gm.error||p.error)throw 0;
+    const mine=new Set(gm.data.filter(r=>r.user_id===S.me).map(r=>r.group_id)),groups={};
+    gm.data.forEach(r=>{if(!mine.has(r.group_id)||!r.groups)return;(groups[r.group_id]||(groups[r.group_id]={name:r.groups.name,code:r.groups.code,members:[]})).members.push(r.user_id);});
+    const server=t.data.map(toTrip),names={};
+    const ids=[...new Set(server.map(x=>x.owner).concat(Object.values(groups).flatMap(g=>g.members)))];
+    if(ids.length){const n=await sb.from("profiles").select("id,name").in("id",ids);(n.data||[]).forEach(x=>names[x.id]=x.name||"A friend");}
+    const st=store();Object.assign(st,{server,groups,names});
+    if(!(st.pend||[]).some(x=>x.op==="prof"))st.profile=Object.assign({species:[]},p.data||{});
+    put(st);S.offline=false;
+  }catch(e){S.offline=true;}
+  overlay();S.ready=true;render();
+}
+function saveProfile(){const st=store();st.profile=S.profile;st.pend=(st.pend||[]).filter(p=>p.op!=="prof");st.pend.push({op:"prof",species:S.profile.species});put(st);S.pending=st.pend.length;flush().then(()=>{overlay();render();});}
+async function saveTrip(){
+  collect();const f=S.form;
+  if(!f.loc.trim()){S.msg="Add a location.";return render();}
+  const row={id:crypto.randomUUID(),owner:S.me,loc:f.loc.trim(),date:f.date,start_t:f.start||null,end_t:f.end||null,target:f.target,air:f.air,wind:f.wind,pres:f.pres,sky:f.sky,water:f.water,tide:f.tide,notes:f.notes,
+    catches:f.catches.filter(c=>c.sp&&c.n>0),group_id:f.share==="me"?null:f.share};
+  const st=store();(st.pend=st.pend||[]).push({op:"add",row});put(st);
+  try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist();}catch(e){}
+  S.form=blank();S.tab="trips";S.msg="";overlay();render();flush().then(load);
+}
+function delTrip(id){
+  if(!confirm("Delete this trip?"))return;const st=store(),i=(st.pend||[]).findIndex(p=>p.op==="add"&&p.row.id===id);
+  if(i>=0)st.pend.splice(i,1);else(st.pend=st.pend||[]).push({op:"del",id});put(st);overlay();render();flush().then(load);
+}
+async function doAuth(){
+  const email=$("#a_email").value.trim(),pw=$("#a_pw").value;
+  try{let r;
+    if(S.signup){r=await sb.auth.signUp({email,password:pw,options:{data:{name:($("#a_name").value||"").trim()}}});
+      if(!r.error&&!r.data.session){S.msg="Check your email to confirm, then sign in.";S.signup=false;return render();}}
+    else r=await sb.auth.signInWithPassword({email,password:pw});
+    if(r.error)throw r.error;S.msg="";
+  }catch(e){S.msg=e.message;render();}
+}
+const myGroups=()=>Object.entries(S.groups);
+const visible=()=>S.trips.filter(t=>S.filter==="all"||(S.filter==="me"?!t.group:t.group===S.filter));
+function collect(){
+  if(!S.form||S.tab!=="log")return;
+  const f=S.form,g=id=>{const e=$("#"+id);return e?e.value:""};
+  ["loc","date","start","end","target","air","wind","pres","sky","water","tide","share","notes"].forEach(k=>f[k]=g("f_"+k));
+  f.catches=[...document.querySelectorAll(".row")].map(r=>({sp:r.querySelector(".c_sp").value,n:+r.querySelector(".c_n").value||0,lure:r.querySelector(".c_l").value}));
+}
+
+async function makeGroup(){const n=$("#g_name").value.trim();if(!n)return;const r=await sb.rpc("create_group",{gname:n});S.msg=r.error?"Could not create group.":"";await load();}
+async function joinGroup(){const c=$("#g_code").value.trim();if(!c)return;const r=await sb.rpc("join_group",{gcode:c});S.msg=r.error?"No group with that code.":"";await load();}
+async function leaveGroup(id){const g=S.groups[id];if(!g||!confirm("Leave "+g.name+"?"))return;await sb.from("group_members").delete().eq("group_id",id).eq("user_id",S.me);load();}
+const vAuth=()=>`<h1>Tight Lines</h1><p class="sub">Sign in to track your fishing.</p>${S.msg?`<div class="note">${esc(S.msg)}</div>`:""}<div class="card">${S.signup?`<label>Name</label><input id="a_name" autocomplete="name">`:""}<label>Email</label><input id="a_email" type="email" autocomplete="email"><label>Password</label><input id="a_pw" type="password" autocomplete="${S.signup?"new-password":"current-password"}"><p><button class="btn" data-a="auth" style="width:100%">${S.signup?"Create account":"Sign in"}</button></p><p><button class="btn ghost" data-a="switch" style="width:100%">${S.signup?"Have an account? Sign in":"New here? Create account"}</button></p></div>`;
+function stats(list){
+  const fish=list.reduce((a,t)=>a+(t.catches||[]).reduce((b,c)=>b+c.n,0),0),lures={};
+  list.forEach(t=>(t.catches||[]).forEach(c=>{if(c.lure){const k=c.lure.trim().toLowerCase();lures[k]=(lures[k]||0)+c.n;}}));
+  const top=Object.entries(lures).sort((a,b)=>b[1]-a[1])[0];
+  return {trips:list.length,fish,top:top?top[0]:"–"};
+}
+function tripCard(t){
+  const cond=[t.sky,t.air&&t.air+"°F",t.wind&&t.wind+" mph wind",t.pres&&t.pres+" inHg",t.water&&"water "+t.water+"°F",t.tide&&t.tide!=="n/a"&&t.tide].filter(Boolean);
+  const total=(t.catches||[]).reduce((a,c)=>a+c.n,0),g=t.group&&S.groups[t.group];
+  const own=t.owner===S.me;
+  return `<div class="card"><div class="top"><div><b>${esc(t.loc)}</b><div class="sub" style="margin:0">${esc(t.date)} · ${esc(t.start)}–${esc(t.end)}${t.target?" · targeting "+esc(t.target):""}</div></div>
+  ${own?`<button class="x" data-a="del" data-id="${esc(t.id)}" title="Delete">×</button>`:""}</div>
+  <div>${t.pending?`<span class="tag">⏳ Not synced</span>`:""}${g?`<span class="tag">👥 ${esc(g.name)}</span>`:""}${!own?`<span class="tag">${esc(S.names[t.owner]||"A friend")}</span>`:""}${cond.map(c=>`<span class="tag">${esc(c)}</span>`).join("")}</div>
+  <div style="margin-top:6px">${total?`<b>${total} fish</b>`:"<b>Skunked</b>"}${(t.catches||[]).map(c=>`<div class="sub" style="margin:2px 0">${c.n} × ${esc(c.sp)}${c.lure?" on "+esc(c.lure):""}</div>`).join("")}</div>
+  ${t.notes?`<div class="sub" style="margin-top:6px">${esc(t.notes)}</div>`:""}</div>`;
+}
+function vTrips(){
+  const l=visible(),s=stats(l),gs=myGroups();
+  return `<div class="top"><div><h1>Trips</h1><p class="sub">Your fishing log</p></div><button class="btn sm" data-a="tab" data-t="log">+ New trip</button></div>
+  ${gs.length?`<div class="chips" style="margin-bottom:6px">${[["all","All"],["me","Just me"],...gs.map(g=>[g[0],g[1].name])].map(([k,n])=>`<button class="chip ${S.filter===k?"on":""}" data-a="filter" data-k="${esc(k)}">${esc(n)}</button>`).join("")}</div>`:""}
+  <div class="card stats"><div class="stat"><b>${s.trips}</b><span>trips</span></div><div class="stat"><b>${s.fish}</b><span>fish</span></div><div class="stat"><b style="font-size:15px;padding-top:5px">${esc(s.top)}</b><span>top lure</span></div></div>
+  ${l.length?l.map(tripCard).join(""):`<div class="empty">No trips yet. Tap “New trip” to log your first.</div>`}`;
+}
+function sel(id,opts,v){return `<select id="${id}">${opts.map(o=>`<option ${o===v?"selected":""}>${esc(o)}</option>`).join("")}</select>`;}
+function vLog(){
+  const f=S.form||(S.form=blank()),gs=myGroups();
+  return `<h1>Log a trip</h1><p class="sub">Conditions, times, catches and what worked.</p>
+  <div class="card"><label>Location</label><input id="f_loc" value="${esc(f.loc)}" placeholder="e.g. Montauk Point">
+  <div class="g3"><div><label>Date</label><input id="f_date" type="date" value="${esc(f.date)}"></div><div><label>Start</label><input id="f_start" type="time" value="${esc(f.start)}"></div><div><label>End</label><input id="f_end" type="time" value="${esc(f.end)}"></div></div>
+  <label>Targeting</label>${sel("f_target",["",...allSp()],f.target)}</div>
+  <div class="card"><b>Conditions</b>
+  <div class="g3"><div><label>Air °F</label><input id="f_air" type="number" value="${esc(f.air)}"></div><div><label>Wind mph</label><input id="f_wind" type="number" value="${esc(f.wind)}"></div><div><label>Pressure inHg</label><input id="f_pres" type="number" step="0.01" value="${esc(f.pres)}"></div></div>
+  <div class="g3"><div><label>Sky</label>${sel("f_sky",SKY,f.sky)}</div><div><label>Water °F</label><input id="f_water" type="number" value="${esc(f.water)}"></div><div><label>Tide</label>${sel("f_tide",TIDE,f.tide)}</div></div>
+  <div class="note">Enter conditions by hand for now. NOAA auto-fill comes next.</div></div>
+  <div class="card"><b>Catches</b>
+  ${f.catches.map((c,i)=>`<div class="row"><div><label>Species</label>${sel("",["",...allSp()],c.sp).replace("<select",'<select class="c_sp"')}</div><div><label>#</label><input class="c_n" type="number" min="0" value="${c.n}"></div><div><label>Lure / bait</label><input class="c_l" value="${esc(c.lure)}" placeholder="e.g. 5in paddle tail"></div><button class="x" data-a="rmc" data-i="${i}">×</button></div>`).join("")}
+  <p><button class="btn ghost sm" data-a="addc">+ Add catch</button></p><label>No catches? Leave the list empty and it logs as skunked.</label></div>
+  <div class="card"><label>Share with</label><select id="f_share"><option value="me">Just me</option>${gs.map(g=>`<option value="${esc(g[0])}" ${f.share===g[0]?"selected":""}>${esc(g[1].name)}</option>`).join("")}</select>
+  <label>Notes</label><textarea id="f_notes" rows="2">${esc(f.notes)}</textarea></div>
+  ${S.msg?`<p style="color:var(--bad)">${esc(S.msg)}</p>`:""}<button class="btn" data-a="save" style="width:100%">Save trip</button>`;
+}
+function vGroups(){
+  const gs=myGroups();
+  return `<h1>Groups</h1><p class="sub">Share trips with friends, or keep everything private.</p>
+  ${gs.map(([c,g])=>`<div class="card top"><div><b>${esc(g.name)}</b><div class="sub" style="margin:0">Code <b>${esc(g.code)}</b> · ${g.members.length} member${g.members.length>1?"s":""}</div></div><button class="btn ghost sm" data-a="leave" data-c="${esc(c)}">Leave</button></div>`).join("")||`<div class="empty">You are not in any groups.</div>`}
+  <div class="card"><b>Create a group</b><label>Name</label><input id="g_name" placeholder="Saturday Surfcasters"><p><button class="btn sm" data-a="mkg">Create</button></p></div>
+  <div class="card"><b>Join with a code</b><label>Code</label><input id="g_code" placeholder="AB12C"><p><button class="btn sm" data-a="jng">Join</button></p></div>
+  ${S.msg?`<p style="color:var(--bad)">${esc(S.msg)}</p>`:""}<p><button class="btn ghost sm" data-a="bk">Download backup</button> <button class="btn ghost sm" data-a="out">Sign out</button></p>`;
+}
+function vSpecies(first){
+  return `<h1>${first?"What are you fishing for?":"Target species"}</h1><p class="sub">Pick the fish you are after. You can change this anytime.</p>
+  <div class="chips">${SPECIES.map(s=>`<button class="chip ${S.profile.species.includes(s)?"on":""}" data-a="sp" data-s="${esc(s)}">${esc(s)}</button>`).join("")}</div>
+  ${first?`<p><button class="btn" data-a="done" ${S.profile.species.length?"":"disabled style='opacity:.5'"}>Continue</button></p>`:""}`;
+}
+function render(){
+  const a=$("#app");
+  if(!S.ready){a.innerHTML=`<p class="empty">Loading…</p>`;return;}
+  if(!S.session){a.innerHTML=vAuth();return;}
+  const first=!S.profile.species.length&&S.tab!=="species"&&!S.skipOnb;
+  let v=first?vSpecies(true):S.tab==="log"?vLog():S.tab==="groups"?vGroups():S.tab==="species"?vSpecies(false):vTrips();
+  const note=(S.offline||S.pending)?`<div class="note">${S.offline?"Offline. ":""}${S.pending?S.pending+(S.pending>1?" entries are":" entry is")+" saved on this device and will sync when you are back online.":"Showing your saved data."}</div>`:"";
+  a.innerHTML=note+v+(first?"":`<nav>${[["trips","🎣 Trips"],["log","＋ Log"],["groups","👥 Groups"],["species","🐟 Species"]].map(([k,n])=>`<button class="${S.tab===k?"on":""}" data-a="tab" data-t="${k}">${n}</button>`).join("")}</nav>`);
+}
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-a]");if(!b)return;const d=b.dataset;
+  if(d.a==="tab"){collect();S.tab=d.t;S.msg="";render();}
+  else if(d.a==="filter"){S.filter=d.k;render();}
+  else if(d.a==="sp"){const l=S.profile.species,i=l.indexOf(d.s);i<0?l.push(d.s):l.splice(i,1);saveProfile();render();}
+  else if(d.a==="done"){S.tab="trips";saveProfile();render();}
+  else if(d.a==="addc"){collect();S.form.catches.push({sp:"",n:1,lure:""});render();}
+  else if(d.a==="rmc"){collect();S.form.catches.splice(+d.i,1);render();}
+  else if(d.a==="save")saveTrip();
+  else if(d.a==="del")delTrip(d.id);
+  else if(d.a==="mkg")makeGroup();
+  else if(d.a==="jng")joinGroup();
+  else if(d.a==="leave")leaveGroup(d.c);
+  else if(d.a==="auth")doAuth();
+  else if(d.a==="switch"){S.signup=!S.signup;S.msg="";render();}
+  else if(d.a==="out"){if(S.pending&&!confirm(S.pending+" unsynced entries will stay on this device until you sign in again. Sign out?"))return;sb.auth.signOut();}
+  else if(d.a==="bk"){const u=URL.createObjectURL(new Blob([JSON.stringify(S.trips,null,1)],{type:"application/json"})),a=document.createElement("a");a.href=u;a.download="tight-lines-backup.json";a.click();setTimeout(()=>URL.revokeObjectURL(u),5000);}
+});
+if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+init();
+</script>
+</body>
+</html>
